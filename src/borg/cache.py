@@ -188,6 +188,7 @@ class Cache:
         self.path = path or os.path.join(get_cache_dir(), repository.id_str)
         self.security_manager = SecurityManager(repository)
         self.do_files = do_files
+        self.prefix_cache = {}
         # Warn user before sending data to a never seen before unencrypted repository
         if not os.path.exists(self.path):
             self.security_manager.assert_access_unknown(warn_if_unencrypted, key)
@@ -521,19 +522,26 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
             self.do_cache = os.path.isdir(archive_path)
             self.chunks = create_master_idx(self.chunks)
 
-    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True):
+    def chunk_exists(self, id, chunk):
+        size = len(chunk)
+        refcount = self.seen_chunk(id, size)
+        return refcount
+
+    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False):
         if not self.txn_active:
             self.begin_txn()
         size = len(chunk)
         refcount = self.seen_chunk(id, size)
         if refcount and not overwrite:
             return self.chunk_incref(id, stats)
+        if prefix_key:
+            self.prefix_cache[prefix_key] = id
         data = self.key.encrypt(chunk)
         csize = len(data)
         self.repository.put(id, data, wait=wait)
         self.chunks.add(id, 1, size, csize)
         stats.update(size, csize, not refcount)
-        return ChunkListEntry(id, size, csize)
+        return ChunkListEntry(id, size, csize, 0, size)
 
     def seen_chunk(self, id, size=None):
         refcount, stored_size, _ = self.chunks.get(id, ChunkIndexEntry(0, None, None))
@@ -549,7 +557,7 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
             self.begin_txn()
         count, size, csize = self.chunks.incref(id)
         stats.update(size, csize, False)
-        return ChunkListEntry(id, size, csize)
+        return ChunkListEntry(id, size, csize, 0, size)
 
     def chunk_decref(self, id, stats, wait=True):
         if not self.txn_active:

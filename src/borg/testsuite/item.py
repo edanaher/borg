@@ -150,8 +150,8 @@ def test_unknown_property():
 
 def test_item_file_size():
     item = Item(mode=0o100666, chunks=[
-        ChunkListEntry(csize=1, size=1000, id=None),
-        ChunkListEntry(csize=1, size=2000, id=None),
+        ChunkListEntry(csize=1, size=1000, id=None, start=0, finish=1000),
+        ChunkListEntry(csize=1, size=2000, id=None, start=0, finish=2000),
     ])
     assert item.get_size() == 3000
 

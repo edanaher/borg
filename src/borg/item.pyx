@@ -117,7 +117,7 @@ class PropDict:
         return property(_get, _set, _del, doc=doc)
 
 
-ChunkListEntry = namedtuple('ChunkListEntry', 'id size csize')
+ChunkListEntry = namedtuple('ChunkListEntry', 'id size csize start finish')
 
 class Item(PropDict):
     """

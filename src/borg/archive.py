@@ -262,7 +262,7 @@ class CacheChunkBuffer(ChunkBuffer):
         self.stats = stats
 
     def write_chunk(self, chunk):
-        id_, _, _ = self.cache.add_chunk(self.key.id_hash(chunk), chunk, self.stats, wait=False)
+        id_, _, _, _, _ = self.cache.add_chunk(self.key.id_hash(chunk), chunk, self.stats, wait=False)
         self.cache.repository.async_response(wait=False)
         return id_
 
@@ -914,7 +914,18 @@ Utilization of max. archive size: {csize_max:.0%}
     def chunk_file(self, item, cache, stats, chunk_iter, chunk_processor=None):
         if not chunk_processor:
             def chunk_processor(data):
-                chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False)
+                prefix_key = self.key.id_hash(data[0:1023])
+                full_key = self.key.id_hash(data)
+                if not cache.chunk_exists(full_key, data) and prefix_key in cache.prefix_cache:
+                    shared_chunk_id = cache.prefix_cache[prefix_key]
+                    shared_prefix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
+                    prefixlen = len(os.path.commonprefix([bytes(shared_prefix), bytes(data)]))
+                    print("Found prefix collision: length is ", prefixlen, " of ", len(data), "/", len(shared_prefix))
+                    new_chunk_entry = cache.add_chunk(self.key.id_hash(data[prefixlen:]), data[prefixlen:], stats, wait=False, prefix_key=prefix_key)
+                    self.cache.repository.async_response(wait=False)
+                    # TODO: What should size and csize be?
+                    return [ChunkListEntry(shared_chunk_id, prefixlen, prefixlen, 0, prefixlen), new_chunk_entry]
+                chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False, prefix_key=prefix_key)
                 self.cache.repository.async_response(wait=False)
                 return chunk_entry
 
@@ -922,7 +933,11 @@ Utilization of max. archive size: {csize_max:.0%}
         from_chunk = 0
         part_number = 1
         for data in chunk_iter:
-            item.chunks.append(chunk_processor(data))
+            processed = chunk_processor(data)
+            if type(processed) is list:
+                item.chunks += processed
+            else:
+                item.chunks.append(processed)
             if self.show_progress:
                 self.stats.show_progress(item=item, dt=0.2)
             if self.checkpoint_interval and time.monotonic() - self.last_checkpoint > self.checkpoint_interval:
