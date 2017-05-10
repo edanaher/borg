@@ -921,26 +921,33 @@ Utilization of max. archive size: {csize_max:.0%}
         self.write_checkpoint()
         return length, number
 
+
     def chunk_file(self, item, cache, stats, chunk_iter, chunk_processor=None):
         if not chunk_processor:
-            def chunk_processor(data):
-                data = b'L' + data
-                prefix_key = self.key.id_hash(data[0:1023])
+            def check_chunk_prefix(data):
                 full_key = self.key.id_hash(data)
-                if not cache.chunk_exists(full_key, data) and prefix_key in cache.prefix_cache:
+                prefix_key = self.key.id_hash(data[0:1023])
+                if cache.chunk_exists(full_key, data):
+                    return ([], data)
+                if prefix_key in cache.prefix_cache:
                     shared_chunk_id = cache.prefix_cache[prefix_key]
                     shared_prefix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
                     prefixlen = len(os.path.commonprefix([bytes(shared_prefix), bytes(data)]))
                     print("Found prefix collision: length is ", prefixlen, " of ", len(data), "/", len(shared_prefix))
                     shared_pointer = b'P' + msgpack.packb((shared_chunk_id, prefixlen -1))
                     shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, size=prefixlen + 1)
-                    new_chunk_entry = cache.add_chunk(self.key.id_hash(data[prefixlen:]), data[prefixlen:], stats, wait=False, prefix_key=prefix_key)
+
                     self.cache.repository.async_response(wait=False)
-                    # TODO: What should size and csize be?
-                    return [shared_pointer_chunk, new_chunk_entry]
+                    return ([shared_pointer_chunk], data[prefixlen:])
+                return ([], data)
+
+            def chunk_processor(data):
+                data = b'L' + data
+                (prefix_chunks, data) = check_chunk_prefix(data)
+                prefix_key = self.key.id_hash(data[0:1023])
                 chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False, prefix_key=prefix_key)
                 self.cache.repository.async_response(wait=False)
-                return chunk_entry
+                return prefix_chunks + [chunk_entry]
 
         item.chunks = []
         from_chunk = 0
