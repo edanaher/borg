@@ -189,6 +189,7 @@ class Cache:
         self.security_manager = SecurityManager(repository)
         self.do_files = do_files
         self.prefix_cache = {}
+        self.suffix_cache = {}
         # Warn user before sending data to a never seen before unencrypted repository
         if not os.path.exists(self.path):
             self.security_manager.assert_access_unknown(warn_if_unencrypted, key)
@@ -528,7 +529,7 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
         refcount = self.seen_chunk(id, size)
         return refcount
 
-    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False, size=None):
+    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False, suffix_key=False, size=None):
         if not self.txn_active:
             self.begin_txn()
         if size == None:
@@ -538,6 +539,8 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
             return self.chunk_incref(id, stats)
         if prefix_key:
             self.prefix_cache[prefix_key] = id
+        if suffix_key:
+            self.suffix_cache[suffix_key] = id
         data = self.key.encrypt(chunk)
         csize = len(data)
         self.repository.put(id, data, wait=wait)

@@ -217,9 +217,9 @@ class DownloadPipeline:
             if decrypted.startswith(b'L'):
                 yield decrypted[1:]
             elif decrypted.startswith(b'P'):
-                id, len = msgpack.unpackb(decrypted[1:])
+                id, start, finish = msgpack.unpackb(decrypted[1:])
                 for rec in self.fetch_many([id], is_preloaded):
-                    yield rec[:len]
+                    yield rec[start:finish]
             else:
                 yield decrypted
 
@@ -934,20 +934,39 @@ Utilization of max. archive size: {csize_max:.0%}
                     shared_prefix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
                     prefixlen = len(os.path.commonprefix([bytes(shared_prefix), bytes(data)]))
                     print("Found prefix collision: length is ", prefixlen, " of ", len(data), "/", len(shared_prefix))
-                    shared_pointer = b'P' + msgpack.packb((shared_chunk_id, prefixlen -1))
+                    shared_pointer = b'P' + msgpack.packb((shared_chunk_id, 0, prefixlen - 1))
                     shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, size=prefixlen + 1)
 
                     self.cache.repository.async_response(wait=False)
                     return ([shared_pointer_chunk], data[prefixlen:])
                 return ([], data)
 
+            def check_chunk_suffix(data):
+                full_key = self.key.id_hash(data)
+                suffix_key = self.key.id_hash(data[-1024:])
+                if cache.chunk_exists(full_key, data):
+                    return ([], data)
+                if suffix_key in cache.suffix_cache:
+                    shared_chunk_id = cache.suffix_cache[suffix_key]
+                    shared_suffix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
+                    suffixlen = len(os.path.commonprefix([bytes(shared_suffix)[::-1], bytes(data)[::-1]]))
+                    print("Found suffix collision: length is ", suffixlen, " of ", len(data), "/", len(shared_suffix))
+                    shared_pointer = b'P' + msgpack.packb((shared_chunk_id, len(shared_suffix) - suffixlen - 1, len(shared_suffix)))
+                    shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, size=suffixlen + 1)
+
+                    self.cache.repository.async_response(wait=False)
+                    return ([shared_pointer_chunk], data[:-suffixlen])
+                return ([], data)
+
             def chunk_processor(data):
                 data = b'L' + data
                 (prefix_chunks, data) = check_chunk_prefix(data)
-                prefix_key = self.key.id_hash(data[0:1023])
-                chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False, prefix_key=prefix_key)
+                (suffix_chunks, data) = check_chunk_suffix(data)
+                prefix_key = self.key.id_hash(data[:1023])
+                suffix_key = self.key.id_hash(data[-1024:])
+                chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False, prefix_key=prefix_key, suffix_key=suffix_key)
                 self.cache.repository.async_response(wait=False)
-                return prefix_chunks + [chunk_entry]
+                return prefix_chunks + [chunk_entry] + suffix_chunks
 
         item.chunks = []
         from_chunk = 0
