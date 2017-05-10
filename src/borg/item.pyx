@@ -220,7 +220,7 @@ class Item(PropDict):
                         chunks, _ = hardlink_masters.get(master, (None, None))
                 if chunks is None:
                     return 0
-            size = sum(getattr(ChunkListEntry(*chunk), attr) for chunk in chunks)
+            size = sum(getattr(ChunkListEntry(*chunk), attr) - 1 for chunk in chunks)
             # if requested, memorize the precomputed (c)size for items that have an own chunks list:
             if memorize and having_chunks:
                 setattr(self, attr, size)

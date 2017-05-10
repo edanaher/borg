@@ -213,7 +213,17 @@ class DownloadPipeline:
 
     def fetch_many(self, ids, is_preloaded=False):
         for id_, data in zip(ids, self.repository.get_many(ids, is_preloaded=is_preloaded)):
-            yield self.key.decrypt(id_, data)
+            decrypted = self.key.decrypt(id_, data)
+            if decrypted.startswith(b'L'):
+                yield decrypted[1:]
+            elif decrypted.startswith(b'P'):
+                id, len = msgpack.unpackb(decrypted[1:])
+                for rec in self.fetch_many([id], is_preloaded):
+                    yield rec[:len]
+            else:
+                yield decrypted
+
+
 
 
 class ChunkBuffer:
@@ -914,6 +924,7 @@ Utilization of max. archive size: {csize_max:.0%}
     def chunk_file(self, item, cache, stats, chunk_iter, chunk_processor=None):
         if not chunk_processor:
             def chunk_processor(data):
+                data = b'L' + data
                 prefix_key = self.key.id_hash(data[0:1023])
                 full_key = self.key.id_hash(data)
                 if not cache.chunk_exists(full_key, data) and prefix_key in cache.prefix_cache:
@@ -921,10 +932,12 @@ Utilization of max. archive size: {csize_max:.0%}
                     shared_prefix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
                     prefixlen = len(os.path.commonprefix([bytes(shared_prefix), bytes(data)]))
                     print("Found prefix collision: length is ", prefixlen, " of ", len(data), "/", len(shared_prefix))
+                    shared_pointer = b'P' + msgpack.packb((shared_chunk_id, prefixlen -1))
+                    shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, size=prefixlen + 1)
                     new_chunk_entry = cache.add_chunk(self.key.id_hash(data[prefixlen:]), data[prefixlen:], stats, wait=False, prefix_key=prefix_key)
                     self.cache.repository.async_response(wait=False)
                     # TODO: What should size and csize be?
-                    return [ChunkListEntry(shared_chunk_id, prefixlen, prefixlen, 0, prefixlen), new_chunk_entry]
+                    return [shared_pointer_chunk, new_chunk_entry]
                 chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False, prefix_key=prefix_key)
                 self.cache.repository.async_response(wait=False)
                 return chunk_entry

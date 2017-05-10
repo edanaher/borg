@@ -522,15 +522,17 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
             self.do_cache = os.path.isdir(archive_path)
             self.chunks = create_master_idx(self.chunks)
 
-    def chunk_exists(self, id, chunk):
-        size = len(chunk)
+    def chunk_exists(self, id, chunk, size=None):
+        if size == None:
+          size = len(chunk)
         refcount = self.seen_chunk(id, size)
         return refcount
 
-    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False):
+    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False, size=None):
         if not self.txn_active:
             self.begin_txn()
-        size = len(chunk)
+        if size == None:
+            size = len(chunk)
         refcount = self.seen_chunk(id, size)
         if refcount and not overwrite:
             return self.chunk_incref(id, stats)
