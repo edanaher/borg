@@ -289,6 +289,16 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
         self.key_type = self.config.get('cache', 'key_type', fallback=None)
         self.previous_location = self.config.get('cache', 'previous_location', fallback=None)
         self.chunks = ChunkIndex.read(os.path.join(self.path, 'chunks').encode('utf-8'))
+        try:
+          with open(os.path.join(self.path, 'prefixes'), 'rb') as f:
+            self.prefix_cache = msgpack.load(f)
+        except FileNotFoundError:
+          pass
+        try:
+          with open(os.path.join(self.path, 'suffixes'), 'rb') as f:
+            self.suffix_cache = msgpack.load(f)
+        except FileNotFoundError:
+          pass
         self.files = None
 
     def open(self, lock_wait=None):
@@ -365,6 +375,10 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
             self.config.write(fd)
         pi.output('Saving chunks cache')
         self.chunks.write(os.path.join(self.path, 'chunks').encode('utf-8'))
+        with open(os.path.join(self.path, 'prefixes'), 'wb') as f:
+          msgpack.dump(self.prefix_cache, f)
+        with open(os.path.join(self.path, 'suffixes'), 'wb') as f:
+          msgpack.dump(self.suffix_cache, f)
         os.rename(os.path.join(self.path, 'txn.active'),
                   os.path.join(self.path, 'txn.tmp'))
         shutil.rmtree(os.path.join(self.path, 'txn.tmp'))
