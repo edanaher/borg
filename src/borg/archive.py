@@ -53,16 +53,18 @@ class Statistics:
 
     def __init__(self, output_json=False):
         self.output_json = output_json
-        self.osize = self.csize = self.usize = self.nfiles = 0
+        self.osize = self.csize = self.usize = self.nfiles = self.fsize = 0
         self.last_progress = 0  # timestamp when last progress was shown
 
-    def update(self, size, csize, unique):
+    def update(self, size, csize, unique, pointer_size=None):
         self.osize += size
-        self.csize += csize
+        self.csize += size
+        if pointer_size != None:
+            self.fsize += pointer_size
         if unique:
             self.usize += csize
 
-    summary = "{label:15} {stats.osize_fmt:>20s} {stats.csize_fmt:>20s} {stats.usize_fmt:>20s}"
+    summary = "{label:15} {stats.osize_fmt:>20s} {stats.csize_fmt:>20s} {stats.usize_fmt:>20s} {stats.fsize_fmt:>20s}"
 
     def __str__(self):
         return self.summary.format(stats=self, label='This archive:')
@@ -91,6 +93,10 @@ class Statistics:
     def csize_fmt(self):
         return format_file_size(self.csize)
 
+    @property
+    def fsize_fmt(self):
+        return format_file_size(self.fsize)
+
     def show_progress(self, item=None, final=False, stream=None, dt=None):
         now = time.monotonic()
         if dt is None or now - self.last_progress > dt:
@@ -107,7 +113,7 @@ class Statistics:
             else:
                 columns, lines = get_terminal_size()
                 if not final:
-                    msg = '{0.osize_fmt} O {0.csize_fmt} C {0.usize_fmt} D {0.nfiles} N '.format(self)
+                    msg = '{0.osize_fmt} O {0.csize_fmt} C {0.usize_fmt} D {0.nfiles} N {0.fsize_fmt} F '.format(self)
                     path = remove_surrogates(item.path) if item else ''
                     space = columns - swidth(msg)
                     if space < 12:
@@ -933,9 +939,9 @@ Utilization of max. archive size: {csize_max:.0%}
                     shared_chunk_id = cache.prefix_cache[prefix_key]
                     shared_prefix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
                     prefixlen = len(os.path.commonprefix([bytes(shared_prefix), bytes(data)]))
-                    print("Found prefix collision: length is ", prefixlen, " of ", len(data), "/", len(shared_prefix))
+                    #print("Found prefix collision: length is ", prefixlen, " of ", len(data), "/", len(shared_prefix))
                     shared_pointer = b'P' + msgpack.packb((shared_chunk_id, 0, prefixlen - 1))
-                    shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, size=prefixlen + 1)
+                    shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, pointer_size=prefixlen + 1)
 
                     self.cache.repository.async_response(wait=False)
                     return ([shared_pointer_chunk], data[prefixlen:])
@@ -950,9 +956,9 @@ Utilization of max. archive size: {csize_max:.0%}
                     shared_chunk_id = cache.suffix_cache[suffix_key]
                     shared_suffix = self.key.decrypt(shared_chunk_id, self.repository.get(shared_chunk_id))
                     suffixlen = len(os.path.commonprefix([bytes(shared_suffix)[::-1], bytes(data)[::-1]]))
-                    print("Found suffix collision: length is ", suffixlen, " of ", len(data), "/", len(shared_suffix))
+                    #print("Found suffix collision: length is ", suffixlen, " of ", len(data), "/", len(shared_suffix))
                     shared_pointer = b'P' + msgpack.packb((shared_chunk_id, len(shared_suffix) - suffixlen - 1, len(shared_suffix)))
-                    shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, size=suffixlen + 1)
+                    shared_pointer_chunk = cache.add_chunk(self.key.id_hash(shared_pointer), shared_pointer, stats, wait=False, pointer_size=suffixlen + 1)
 
                     self.cache.repository.async_response(wait=False)
                     return ([shared_pointer_chunk], data[:-suffixlen])

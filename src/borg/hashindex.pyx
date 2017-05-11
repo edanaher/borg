@@ -293,7 +293,7 @@ cdef class ChunkIndex(IndexBase):
         return iter
 
     def summarize(self):
-        cdef uint64_t size = 0, csize = 0, unique_size = 0, unique_csize = 0, chunks = 0, unique_chunks = 0
+        cdef uint64_t size = 0, csize = 0, fsize = 0, unique_size = 0, unique_csize = 0, chunks = 0, unique_chunks = 0
         cdef uint32_t *values
         cdef uint32_t refcount
         cdef void *key = NULL

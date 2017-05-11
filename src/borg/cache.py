@@ -543,10 +543,12 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
         refcount = self.seen_chunk(id, size)
         return refcount
 
-    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False, suffix_key=False, size=None):
+    def add_chunk(self, id, chunk, stats, overwrite=False, wait=True, prefix_key=False, suffix_key=False, pointer_size=None):
         if not self.txn_active:
             self.begin_txn()
-        if size == None:
+        if pointer_size != None:
+            size = pointer_size
+        else:
             size = len(chunk)
         refcount = self.seen_chunk(id, size)
         if refcount and not overwrite:
@@ -559,7 +561,7 @@ Chunk index:    {0.total_unique_chunks:20d} {0.total_chunks:20d}"""
         csize = len(data)
         self.repository.put(id, data, wait=wait)
         self.chunks.add(id, 1, size, csize)
-        stats.update(size, csize, not refcount)
+        stats.update(size, csize, not refcount, pointer_size)
         return ChunkListEntry(id, size, csize, 0, size)
 
     def seen_chunk(self, id, size=None):
