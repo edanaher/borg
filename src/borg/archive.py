@@ -297,7 +297,7 @@ class Archive:
     def __init__(self, repository, key, manifest, name, cache=None, create=False,
                  checkpoint_interval=300, numeric_owner=False, noatime=False, noctime=False, progress=False,
                  chunker_params=CHUNKER_PARAMS, start=None, start_monotonic=None, end=None,
-                 consider_part_files=False, log_json=False):
+                 consider_part_files=False, log_json=False, fix_dedupe=False):
         self.cwd = os.getcwd()
         self.key = key
         self.repository = repository
@@ -311,6 +311,7 @@ class Archive:
         self.numeric_owner = numeric_owner
         self.noatime = noatime
         self.noctime = noctime
+        self.fix_dedupe = fix_dedupe
         assert (start is None) == (start_monotonic is None), 'Logic error: if start is given, start_monotonic must be given as well and vice versa.'
         if start is None:
             start = datetime.utcnow()
@@ -966,10 +967,14 @@ Utilization of max. archive size: {csize_max:.0%}
 
             def chunk_processor(data):
                 data = b'L' + data
-                (prefix_chunks, data) = check_chunk_prefix(data)
-                (suffix_chunks, data) = check_chunk_suffix(data)
-                prefix_key = self.key.id_hash(data[:1023])
-                suffix_key = self.key.id_hash(data[-1024:])
+                if self.fix_dedupe:
+                    (prefix_chunks, data) = check_chunk_prefix(data)
+                    (suffix_chunks, data) = check_chunk_suffix(data)
+                    prefix_key = self.key.id_hash(data[:1023])
+                    suffix_key = self.key.id_hash(data[-1024:])
+                else:
+                    prefix_chunks = suffix_chunks = []
+                    prefix_key = suffix_key = None
                 chunk_entry = cache.add_chunk(self.key.id_hash(data), data, stats, wait=False, prefix_key=prefix_key, suffix_key=suffix_key)
                 self.cache.repository.async_response(wait=False)
                 return prefix_chunks + [chunk_entry] + suffix_chunks

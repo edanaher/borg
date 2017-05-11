@@ -477,7 +477,7 @@ class Archiver:
                                   numeric_owner=args.numeric_owner, noatime=args.noatime, noctime=args.noctime,
                                   progress=args.progress,
                                   chunker_params=args.chunker_params, start=t0, start_monotonic=t0_monotonic,
-                                  log_json=args.log_json)
+                                  log_json=args.log_json, fix_dedupe=args.fix_dedupe)
                 create_inner(archive, cache)
         else:
             create_inner(None, None)
@@ -2316,6 +2316,10 @@ class Archiver:
                                           formatter_class=argparse.RawDescriptionHelpFormatter,
                                           help='create backup')
         subparser.set_defaults(func=self.do_create)
+
+        subparser.add_argument('-F', '--fix-dedupe', dest='fix_dedupe',
+                               action='store_true', default=False,
+                               help='dedupe {pre,sux}fix')
 
         subparser.add_argument('-n', '--dry-run', dest='dry_run',
                                action='store_true', default=False,
