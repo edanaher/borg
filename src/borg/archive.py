@@ -58,7 +58,7 @@ class Statistics:
 
     def update(self, size, csize, unique, pointer_size=None):
         self.osize += size
-        self.csize += size
+        self.csize += csize
         if pointer_size != None:
             self.fsize += pointer_size
         if unique:
